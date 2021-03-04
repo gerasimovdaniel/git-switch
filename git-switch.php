@@ -32,13 +32,19 @@ class Git_Switch {
 
 		add_action( 'wp_ajax_git-switch-branch', array( $this, 'handle_switch_branch_action' ) );
 		add_action( 'admin_bar_menu', array( $this, 'action_admin_bar_menu' ), 999 );
-		
-		if ( defined( 'GIT_SWITCH_DEPLOY_SECRET' )
-		&& ! empty( $_GET['git-switch-auto-deploy'] )
-		&& $_GET['git-switch-auto-deploy'] === GIT_SWITCH_DEPLOY_SECRET ) {
-			$this->refresh();
-			echo "Refreshed.";
-			exit;
+
+		if ( defined( 'GIT_SWITCH_DEPLOY_SECRET' ) ) {
+			if ( ! empty( $_GET['git-switch-auto-deploy'] ) && $_GET['git-switch-auto-deploy'] === GIT_SWITCH_DEPLOY_SECRET ) {
+				$this->refresh();
+				echo "Refreshed.";
+				exit;
+			}
+
+			if ( ! empty( $_GET['git-pull'] ) && $_GET['git-pull'] === GIT_SWITCH_DEPLOY_SECRET ) {
+				$this->refresh();
+				wp_safe_redirect( remove_query_arg( 'git-pull' ) );
+				exit;
+			}
 		}
 
 		$clean_link = function() {
@@ -108,6 +114,13 @@ class Git_Switch {
 		) );
 
 		if ( ! empty( $status['remote'] ) ) {
+			$wp_admin_bar->add_menu( array(
+				'parent' => 'git-switch',
+				'id'     => 'git-pull',
+				'title'  => 'Pull changes',
+				'href'   => add_query_arg( 'git-pull', GIT_SWITCH_DEPLOY_SECRET ),
+			) );
+
 			$wp_admin_bar->add_menu( array(
 				'parent' => 'git-switch',
 				'id'     => 'git-switch-branches',
