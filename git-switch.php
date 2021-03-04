@@ -106,13 +106,6 @@ class Git_Switch {
 			'href'   => '#'
 		) );
 
-		$wp_admin_bar->add_menu( array(
-			'parent' => 'git-switch',
-			'id'     => 'git-switch-details',
-			'title'  => ( implode('<br>', array_map( 'esc_html', $status['status'] ) ) ),
-			'href'   => '#'
-		) );
-
 		if ( ! empty( $status['remote'] ) ) {
 			$wp_admin_bar->add_menu( array(
 				'parent' => 'git-switch',
