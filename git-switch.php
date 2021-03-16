@@ -33,19 +33,17 @@ class Git_Switch {
 		add_action( 'wp_ajax_git-switch-branch', array( $this, 'handle_switch_branch_action' ) );
 		add_action( 'admin_bar_menu', array( $this, 'action_admin_bar_menu' ), 999 );
 
-		if ( defined( 'GIT_SWITCH_DEPLOY_SECRET' ) ) {
-			if ( ! empty( $_GET['git-switch-auto-deploy'] ) && $_GET['git-switch-auto-deploy'] === GIT_SWITCH_DEPLOY_SECRET ) {
-				$this->refresh();
-				echo "Refreshed.";
-				exit;
+		$this->handle_deploy();
+
+		add_action( 'init', function() {
+			$maybe_purge_cache = get_transient( 'force_purge_cache' );
+			if ( ! $maybe_purge_cache ) {
+				return;
 			}
 
-			if ( ! empty( $_GET['git-pull'] ) && $_GET['git-pull'] === GIT_SWITCH_DEPLOY_SECRET ) {
-				$this->refresh();
-				wp_safe_redirect( remove_query_arg( 'git-pull' ) );
-				exit;
-			}
-		}
+			delete_transient( 'force_purge_cache' );
+			$this->purge_cache();
+		});
 
 		$clean_link = function() {
 			?>
@@ -62,6 +60,41 @@ class Git_Switch {
 		add_action( 'admin_head', $clean_link );
 		add_action( 'wp_head', $clean_link );
 
+	}
+
+	/**
+	 * Purge cache for current site or entire multisite network.
+	 */
+	protected function purge_cache() {
+
+		if ( is_multisite() ) {
+			$sites = wp_get_sites();
+			foreach ( $sites as $site ) {
+				switch_to_blog( $site->blog_id );
+
+				$this->handle_cache_purging();
+
+				restore_current_blog();
+			}
+		} else {
+			$this->handle_cache_purging();
+		}
+	}
+
+	/**
+	 * Actually purge some cache.
+	 */
+	protected function handle_cache_purging() {
+
+		// Purge The7 dynamic css.
+		if ( function_exists( 'presscore_refresh_dynamic_css' ) ) {
+			presscore_refresh_dynamic_css();
+		}
+
+		// Purge Elementor cache.
+		if ( class_exists( 'Elementor\Plugin' ) ) {
+			\Elementor\Plugin::$instance->files_manager->clear_cache();
+		}
 	}
 
 	/**
@@ -82,9 +115,11 @@ class Git_Switch {
 		exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $theme_path ), escapeshellarg( $_GET['branch'] ) ), $results );
 		delete_transient( self::CACHE_KEY );
 		do_action( 'git_switch_branch', $_GET['branch'] );
+
+		$this->schedule_cache_purging();
+
 		wp_safe_redirect( wp_get_referer() );
 		exit;
-
 	}
 
 	/**
@@ -215,8 +250,42 @@ class Git_Switch {
 		}
 
 		delete_transient( self::CACHE_KEY );
+
+		$this->schedule_cache_purging();
 	}
 
+	/**
+	 * Handle deploy.
+	 */
+	protected function handle_deploy() {
+
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		if ( ! defined( 'GIT_SWITCH_DEPLOY_SECRET' ) ) {
+			return;
+		}
+
+		if ( ! empty( $_GET['git-switch-auto-deploy'] ) && $_GET['git-switch-auto-deploy'] === GIT_SWITCH_DEPLOY_SECRET ) {
+			$this->refresh();
+			echo "Refreshed.";
+			exit;
+		}
+
+		if ( ! empty( $_GET['git-pull'] ) && $_GET['git-pull'] === GIT_SWITCH_DEPLOY_SECRET ) {
+			$this->refresh();
+			wp_safe_redirect( remove_query_arg( 'git-pull' ) );
+			exit;
+		}
+	}
+
+	/**
+	 * Force cache purging on next page load.
+	 */
+	protected function schedule_cache_purging() {
+		add_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
+	}
 }
 
 /**
