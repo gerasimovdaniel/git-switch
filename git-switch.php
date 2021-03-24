@@ -284,7 +284,7 @@ class Git_Switch {
 	 * Force cache purging on next page load.
 	 */
 	protected function schedule_cache_purging() {
-		add_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
+		set_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
 	}
 }
 
