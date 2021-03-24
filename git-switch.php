@@ -68,7 +68,7 @@ class Git_Switch {
 	protected function purge_cache() {
 
 		if ( is_multisite() ) {
-			$sites = wp_get_sites();
+			$sites = get_sites();
 			foreach ( $sites as $site ) {
 				switch_to_blog( $site->blog_id );
 
