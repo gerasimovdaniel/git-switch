@@ -246,7 +246,7 @@ class Git_Switch {
 
 		$status = $this->get_git_status();
 		if ( 'detached' !== $status['branch'] ) {
-			exec( sprintf( 'cd %s; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $theme_path ), escapeshellarg( $status['branch'] ) ) );
+			exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $theme_path ), escapeshellarg( $status['branch'] ) ) );
 		}
 
 		delete_transient( self::CACHE_KEY );
