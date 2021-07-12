@@ -226,7 +226,7 @@ class Git_Switch {
 			$return['dirty'] = '';
 		}
 
-		exec( sprintf( 'cd %s; git branch -r', escapeshellarg( $theme_path ) ), $branches );
+		exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $theme_path ) ), $branches );
 		if ( ! empty( $branches ) ) {
 			$branches = array_map( function( $branch ) {
 				return trim( str_replace( 'origin/', '', $branch ) );
