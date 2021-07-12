@@ -54,6 +54,10 @@ class Git_Switch {
 			#wp-admin-bar-git-switch-details > a:hover {
 				color: #eee !important;
 			}
+			#wp-admin-bar-git-switch-branches-default {
+                max-height: 80vh;
+                overflow: scroll;
+			}
 			</style>
 			<?php
 		};
