@@ -161,6 +161,11 @@ class Git_Switch {
 			) );
 			foreach( $status['remote'] as $remote_branch ) {
 
+				// Do not display HEAD branch.
+				if ( strpos( $remote_branch, 'HEAD ' ) !== false ) {
+					continue;
+				}
+
 				$query_args = array(
 					'action'        => 'git-switch-branch',
 					'branch'        => $remote_branch,
@@ -169,7 +174,7 @@ class Git_Switch {
 				$branch_switch_url = add_query_arg( $query_args, admin_url( 'admin-ajax.php' ) );
 
 				$title = esc_html( $remote_branch );
-				if ( $remote_branch == $status['branch'] ) {
+				if ( $remote_branch === $status['branch'] ) {
 					$title = '* ' . $title;
 				}
 
