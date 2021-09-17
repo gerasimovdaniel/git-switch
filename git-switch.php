@@ -11,7 +11,7 @@
 class Git_Switch {
 
 	private static $instance;
-	
+
 	private $capability = 'switch_themes';
 
 	const CACHE_KEY = 'git-switch-status';
@@ -267,10 +267,6 @@ class Git_Switch {
 	 * Handle deploy.
 	 */
 	protected function handle_deploy() {
-
-		if ( ! is_admin() ) {
-			return;
-		}
 
 		if ( ! defined( 'GIT_SWITCH_DEPLOY_SECRET' ) ) {
 			return;
