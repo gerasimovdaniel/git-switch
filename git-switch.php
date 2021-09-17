@@ -4,7 +4,7 @@
  * Plugin URI: http://danielbachhuber.com
  * Description: Switch your theme between Git branches.
  * Author: Daniel Bachhuber
- * Version: 0.1-alpha
+ * Version: 1.0.1
  * Author URI: http://danielbachhuber.com
  */
 
