@@ -117,6 +117,9 @@ class Git_Switch {
 		$theme_path = get_stylesheet_directory();
 
 		exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $theme_path ), escapeshellarg( $_GET['branch'] ) ), $results );
+
+		$this->opcache_reset();
+
 		delete_transient( self::CACHE_KEY );
 		do_action( 'git_switch_branch', $_GET['branch'] );
 
@@ -290,6 +293,12 @@ class Git_Switch {
 	 */
 	protected function schedule_cache_purging() {
 		set_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
+	}
+
+	protected function opcache_reset() {
+		if ( function_exists( 'opcache_reset' ) ) {
+			opcache_reset();
+		}
 	}
 }
 
