@@ -122,6 +122,7 @@ class Git_Switch {
 
 		$this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
 		$this->opcache_reset();
+		$this->memcached_reset();
 		$this->clear_cache( $repo );
 
 		do_action( 'git_switch_branch', $branch, $repo );
@@ -314,6 +315,25 @@ class Git_Switch {
 	protected function opcache_reset() {
 		if ( function_exists( 'opcache_reset' ) ) {
 			opcache_reset();
+		}
+	}
+
+	/**
+	 * Reset the memcached cache
+	 */
+	protected function memcached_reset() {
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
+
+		if ( class_exists( 'Memcached' ) ) {
+			// OC4EVERYONE plugin
+			if ( defined( 'OC4EVERYONE_PREDEFINED_SERVER' ) ) {
+				$memcached = new Memcached();
+				list($node, $port) = explode(':', OC4EVERYONE_PREDEFINED_SERVER);
+				$memcached->addServer($node, $port, PHP_INT_MAX);
+				$memcached->flush(0);
+			}
 		}
 	}
 
