@@ -137,7 +137,7 @@ class Git_Switch {
 	 */
 	public function action_admin_bar_menu( $wp_admin_bar ) {
 
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( $this->capability ) ) {
 			return;
 		}
 
