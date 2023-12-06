@@ -208,6 +208,10 @@ class Git_Switch {
 	 * Get the current Git status
 	 */
 	public function get_repo_data( $repo ) {
+		if ( ! in_array( $repo, $this->get_repos() ) ) {
+			return false;
+		}
+
 		$cache_status = array_filter( (array) get_transient( self::CACHE_KEY ) );
 
 		if ( isset( $cache_status[ $repo ] ) ) {
