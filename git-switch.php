@@ -16,11 +16,6 @@ class Git_Switch {
 
 	const CACHE_KEY = 'git-switch-status';
 
-	const REPOS = [
-		'themes/dt-the7',
-		'plugins/the7-studio',
-	];
-
 	public static function get_instance() {
 
 		if ( ! isset( self::$instance ) ) {
@@ -373,7 +368,9 @@ class Git_Switch {
 			return array_keys( GIT_SWITCH_REPOS );
 		}
 
-		return self::REPOS;
+		$active_theme_dir = basename(get_template());
+
+		return [ 'themes/' . $active_theme_dir ];
 	}
 }
 
