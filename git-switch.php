@@ -34,6 +34,9 @@ class Git_Switch {
 	 * Load the plugin
 	 */
 	private function load() {
+		if ( ! function_exists( 'exec' ) ) {
+			return false;
+		}
 
 		add_action( 'wp_ajax_git-switch-branch', array( $this, 'handle_switch_branch_action' ) );
 		add_action( 'admin_bar_menu', array( $this, 'action_admin_bar_menu' ), 999 );
@@ -122,11 +125,7 @@ class Git_Switch {
 			wp_die( "Can't interact with Git." );
 		}
 
-		// $theme_path = get_stylesheet_directory();
-
-		// exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $theme_path ), escapeshellarg( $branch ) ), $results );
-
-		$this->git_checkout_branch( $repo, $branch );
+		$this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
 		$this->opcache_reset();
 
 		delete_transient( self::CACHE_KEY );
@@ -216,17 +215,10 @@ class Git_Switch {
 		$cache_status = array_filter( (array) get_transient( self::CACHE_KEY ) );
 
 		if ( isset( $cache_status[ $repo ] ) ) {
-			// return $cache_status[ $repo ];
+			return $cache_status[ $repo ];
 		}
 
-		if ( ! function_exists( 'exec' ) ) {
-			return false;
-		}
-
-		// $theme_path = get_stylesheet_directory();
-		// exec( sprintf( 'cd %s; git status', escapeshellarg( $theme_path ) ), $status );
-
-		$status = $this->git_get_status( $repo );
+		$status = $this->execute_git_command( $repo, 'git status' );
 		if ( empty( $status ) or ( false !== strpos( $status[0], 'fatal' ) ) ) {
 			return false;
 		}
@@ -247,7 +239,7 @@ class Git_Switch {
 			$return['dirty'] = '';
 		}
 
-		$branches = $this->git_get_branches( $repo );
+		$branches = $this->execute_git_command( $repo, 'git branch -r --sort=-committerdate' );
 		if ( ! empty( $branches ) ) {
 			$branches = array_map( function( $branch ) {
 				return trim( str_replace( 'origin/', '', $branch ) );
@@ -266,20 +258,10 @@ class Git_Switch {
 	 * Refresh Git
 	 */
 	public function refresh( $repo ) {
-
-		if ( ! function_exists( 'exec' ) ) {
-			return false;
-		}
-
-		// $path = $this->get_repo_abspath( $repo );
-		// exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $path ) ) );
-
 		$this->execute_git_command( $repo, 'git remote update; git fetch origin; git remote prune origin' );
 
 		$status = $this->get_repo_data( $repo );
 		if ( isset( $status['branch'] ) && 'detached' !== $status['branch'] ) {
-			// exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $path ), escapeshellarg( $status['branch'] ) ) );
-			
 			$this->execute_git_command( $repo, sprintf( 'git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $status['branch'] ) ) );
 		}
 
@@ -326,6 +308,9 @@ class Git_Switch {
 		set_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
 	}
 
+	/**
+	 * Reset the opcache
+	 */
 	protected function opcache_reset() {
 		if ( function_exists( 'opcache_reset' ) ) {
 			opcache_reset();
@@ -333,39 +318,24 @@ class Git_Switch {
 	}
 
 	/**
-	 * Checkout the specified branch and update submodules.
-	 *
-	 * @param string $repo The path to the repo directory.
-	 * @param string $branch The branch to checkout.
-	 * @return array The results of the execution.
+	 * Get the absolute path to the repo
+	 * 
+	 * @param string $repo The repo
+	 * 
+	 * @return string The absolute path
 	 */
-	private function git_checkout_branch( $repo, $branch ) {
-		// $path = $this->get_repo_abspath( $repo );
-		// exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $path ), escapeshellarg( $branch ) ), $results );
-		$results = $this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
-		return $results;
-	}
-
-	private function git_get_status( $repo ) {
-		// $path = $this->get_repo_abspath( $repo );
-		// exec( sprintf( 'cd %s; git status', escapeshellarg( $path ) ), $status );
-
-		$status = $this->execute_git_command( $repo, 'git status' );
-		return $status;
-	}
-
-	private function git_get_branches( $repo ) {
-		// $path = $this->get_repo_abspath( $repo );
-		// exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $path ) ), $branches );
-
-		$branches = $this->execute_git_command( $repo, 'git branch -r --sort=-committerdate' );
-		return $branches;
-	}
-
 	private function get_repo_abspath( $repo ) {
 		return trailingslashit( WP_CONTENT_DIR ) . $repo;
 	}
 
+	/**
+	 * Execute a Git command
+	 * 
+	 * @param string $repo The repo
+	 * @param string $command The command
+	 * 
+	 * @return array The results of the command
+	 */
 	private function execute_git_command( $repo, $command ) {
 		$this->setup_git_ssh_command( $repo );
 
@@ -374,6 +344,9 @@ class Git_Switch {
 		return $results;
 	}
 
+	/**
+	 * Setup the GIT_SSH_COMMAND environment variable
+	 */
 	private function setup_git_ssh_command( $repo ) {
 		if ( ! defined( 'GIT_SWITCH_REPOS' ) ) {
 			return;
