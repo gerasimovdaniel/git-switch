@@ -247,8 +247,6 @@ class Git_Switch {
 			$return['dirty'] = '';
 		}
 
-		// exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $theme_path ) ), $branches );
-
 		$branches = $this->git_get_branches( $repo );
 		if ( ! empty( $branches ) ) {
 			$branches = array_map( function( $branch ) {
@@ -273,15 +271,16 @@ class Git_Switch {
 			return false;
 		}
 
-		// $theme_path = get_stylesheet_directory();
-		// exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $theme_path ) ) );
+		// $path = $this->get_repo_abspath( $repo );
+		// exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $path ) ) );
 
-		$path = $this->get_repo_abspath( $repo );
-		exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $path ) ) );
+		$this->execute_git_command( $repo, 'git remote update; git fetch origin; git remote prune origin' );
 
 		$status = $this->get_repo_data( $repo );
 		if ( isset( $status['branch'] ) && 'detached' !== $status['branch'] ) {
-			exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $path ), escapeshellarg( $status['branch'] ) ) );
+			// exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $path ), escapeshellarg( $status['branch'] ) ) );
+			
+			$this->execute_git_command( $repo, sprintf( 'git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $status['branch'] ) ) );
 		}
 
 		$git_cache = get_transient( self::CACHE_KEY );
@@ -341,25 +340,54 @@ class Git_Switch {
 	 * @return array The results of the execution.
 	 */
 	private function git_checkout_branch( $repo, $branch ) {
-		$path = $this->get_repo_abspath( $repo );
-		exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $path ), escapeshellarg( $branch ) ), $results );
+		// $path = $this->get_repo_abspath( $repo );
+		// exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $path ), escapeshellarg( $branch ) ), $results );
+		$results = $this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
 		return $results;
 	}
 
 	private function git_get_status( $repo ) {
-		$path = $this->get_repo_abspath( $repo );
-		exec( sprintf( 'cd %s; git status', escapeshellarg( $path ) ), $status );
+		// $path = $this->get_repo_abspath( $repo );
+		// exec( sprintf( 'cd %s; git status', escapeshellarg( $path ) ), $status );
+
+		$status = $this->execute_git_command( $repo, 'git status' );
 		return $status;
 	}
 
 	private function git_get_branches( $repo ) {
-		$path = $this->get_repo_abspath( $repo );
-		exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $path ) ), $branches );
+		// $path = $this->get_repo_abspath( $repo );
+		// exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $path ) ), $branches );
+
+		$branches = $this->execute_git_command( $repo, 'git branch -r --sort=-committerdate' );
 		return $branches;
 	}
 
 	private function get_repo_abspath( $repo ) {
 		return trailingslashit( WP_CONTENT_DIR ) . $repo;
+	}
+
+	private function execute_git_command( $repo, $command ) {
+		$this->setup_git_ssh_command( $repo );
+
+		$path = $this->get_repo_abspath( $repo );
+		exec( sprintf( 'cd %s; %s', escapeshellarg( $path ), $command ), $results );
+		return $results;
+	}
+
+	private function setup_git_ssh_command( $repo ) {
+		if ( ! defined( 'GIT_SWITCH_REPOS' ) ) {
+			return;
+		}
+
+		$repos = GIT_SWITCH_REPOS;
+		if ( ! isset( $repos[ $repo ]['ssh_key_path'] ) ) {
+			return;
+		}
+
+		$ssh_key_path = realpath( ABSPATH . $repos[ $repo ]['ssh_key_path'] );
+
+		// Set the GIT_SSH_COMMAND environment variable
+		putenv("GIT_SSH_COMMAND=ssh -i $ssh_key_path");
 	}
 
 	/**
@@ -368,6 +396,10 @@ class Git_Switch {
 	 * @return array The list of repos.
 	 */
 	private function get_repos() {
+		if ( defined( 'GIT_SWITCH_REPOS' ) ) {
+			return array_keys( GIT_SWITCH_REPOS );
+		}
+
 		return self::REPOS;
 	}
 }
