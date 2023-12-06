@@ -122,8 +122,8 @@ class Git_Switch {
 
 		$this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
 		$this->opcache_reset();
+		$this->clear_cache( $repo );
 
-		delete_transient( self::CACHE_KEY );
 		do_action( 'git_switch_branch', $branch, $repo );
 
 		$this->schedule_cache_purging();
@@ -252,7 +252,14 @@ class Git_Switch {
 	/**
 	 * Refresh Git
 	 */
-	public function refresh( $repo ) {
+	public function refresh( $repo = null ) {
+		if ( $repo === null ) {
+			foreach( $this->get_repos() as $repo ) {
+				$this->refresh( $repo );
+			}
+			return;
+		}
+
 		$this->execute_git_command( $repo, 'git remote update; git fetch origin; git remote prune origin' );
 
 		$status = $this->get_repo_data( $repo );
@@ -260,9 +267,7 @@ class Git_Switch {
 			$this->execute_git_command( $repo, sprintf( 'git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $status['branch'] ) ) );
 		}
 
-		$git_cache = get_transient( self::CACHE_KEY );
-		unset( $git_cache[ $repo ] );
-		set_transient( self::CACHE_KEY, $git_cache, MINUTE_IN_SECONDS * 3 );
+		$this->clear_cache( $repo );
 
 		$this->schedule_cache_purging();
 	}
@@ -356,6 +361,21 @@ class Git_Switch {
 
 		// Set the GIT_SSH_COMMAND environment variable
 		putenv("GIT_SSH_COMMAND=ssh -i $ssh_key_path");
+	}
+
+	/**
+	 * Clear the repo cache. If no repo is specified, clear the entire cache.
+	 * 
+	 * @param string|null $repo The repo to clear
+	 */
+	private function clear_cache( $repo = null ) {
+		if ( $repo ) {
+			$git_cache = get_transient( self::CACHE_KEY );
+			unset( $git_cache[ $repo ] );
+			set_transient( self::CACHE_KEY, $git_cache, MINUTE_IN_SECONDS * 3 );
+		} else {
+			delete_transient( self::CACHE_KEY );
+		}
 	}
 
 	/**
