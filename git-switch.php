@@ -16,6 +16,11 @@ class Git_Switch {
 
 	const CACHE_KEY = 'git-switch-status';
 
+	const REPOS = [
+		'themes/dt-the7',
+		'plugins/the7-studio',
+	];
+
 	public static function get_instance() {
 
 		if ( ! isset( self::$instance ) ) {
@@ -105,23 +110,27 @@ class Git_Switch {
 	 * Handle the action to switch a branch
 	 */
 	public function handle_switch_branch_action() {
+		$nonce = filter_input( INPUT_GET, 'nonce' );
+		$branch = filter_input( INPUT_GET, 'branch' );
+		$repo = filter_input( INPUT_GET, 'repo' );
 
-		if ( ! current_user_can( $this->capability ) || ! wp_verify_nonce( $_GET['nonce'], 'git-switch-branch-' . $_GET['branch'] ) ) {
+		if ( ! current_user_can( $this->capability ) || ! wp_verify_nonce( $nonce, "git-switch-branch-{$repo}-{$branch}" ) ) {
 			wp_die( "You can't do this." );
 		}
 
-		if ( ! $status = $this->get_git_status() ) {
+		if ( ! $status = $this->get_repo_data( $repo ) ) {
 			wp_die( "Can't interact with Git." );
 		}
 
-		$theme_path = get_stylesheet_directory();
+		// $theme_path = get_stylesheet_directory();
 
-		exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $theme_path ), escapeshellarg( $_GET['branch'] ) ), $results );
+		// exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $theme_path ), escapeshellarg( $branch ) ), $results );
 
+		$this->git_checkout_branch( $repo, $branch );
 		$this->opcache_reset();
 
 		delete_transient( self::CACHE_KEY );
-		do_action( 'git_switch_branch', $_GET['branch'] );
+		do_action( 'git_switch_branch', $branch, $repo );
 
 		$this->schedule_cache_purging();
 
@@ -138,77 +147,86 @@ class Git_Switch {
 			return;
 		}
 
-		if ( ! $status = $this->get_git_status() ) {
-			return;
-		}
+		foreach( $this->get_repos() as $repo ) {
+			$status = $this->get_repo_data( $repo );
+			if ( ! $status ) {
+				continue;
+			}
 
-		$wp_admin_bar->add_menu( array(
-			'id'     => 'git-switch',
-			'title'  => sprintf( 'git(%s)%s', $status['branch'], $status['dirty'] ),
-			'href'   => '#'
-		) );
-
-		if ( ! empty( $status['remote'] ) ) {
+			$sanitize_repo = sanitize_key( $repo );
+			$top_menu_id = 'git-switch-' . $sanitize_repo;
+			$pull_menu_id = 'git-pull-' . $sanitize_repo;
+			$switch_branch_menu_id = 'git-switch-branches-' . $sanitize_repo;
+	
 			$wp_admin_bar->add_menu( array(
-				'parent' => 'git-switch',
-				'id'     => 'git-pull',
-				'title'  => 'Pull changes',
-				'href'   => add_query_arg( 'git-pull', GIT_SWITCH_DEPLOY_SECRET ),
-			) );
-
-			$wp_admin_bar->add_menu( array(
-				'parent' => 'git-switch',
-				'id'     => 'git-switch-branches',
-				'title'  => 'Switch branch:',
+				'id'     => $top_menu_id,
+				'title'  => sprintf( '%s(%s)%s', basename( $repo ), $status['branch'], $status['dirty'] ),
 				'href'   => '#'
 			) );
-			foreach( $status['remote'] as $remote_branch ) {
-
-				// Do not display HEAD branch.
-				if ( strpos( $remote_branch, 'HEAD ' ) !== false ) {
-					continue;
-				}
-
-				$query_args = array(
-					'action'        => 'git-switch-branch',
-					'branch'        => $remote_branch,
-					'nonce'         => wp_create_nonce( 'git-switch-branch-' . $remote_branch ),
-					);
-				$branch_switch_url = add_query_arg( $query_args, admin_url( 'admin-ajax.php' ) );
-
-				$title = esc_html( $remote_branch );
-				if ( $remote_branch === $status['branch'] ) {
-					$title = '* ' . $title;
-				}
-
+	
+			if ( ! empty( $status['remote'] ) ) {
 				$wp_admin_bar->add_menu( array(
-					'parent' => 'git-switch-branches',
-					'id'     => 'git-switch-branch-' . sanitize_key( $remote_branch ),
-					'title'  => $title,
-					'href'   => esc_url( $branch_switch_url ),
+					'parent' => $top_menu_id,
+					'id'     => $pull_menu_id,
+					'title'  => 'Pull changes',
+					'href'   => add_query_arg( [ 'repo' => $repo, 'git-pull' => GIT_SWITCH_DEPLOY_SECRET ] ),
 				) );
+	
+				$wp_admin_bar->add_menu( array(
+					'parent' => $top_menu_id,
+					'id'     => $switch_branch_menu_id,
+					'title'  => 'Switch branch:',
+					'href'   => '#'
+				) );
+				foreach( $status['remote'] as $remote_branch ) {
+	
+					// Do not display HEAD branch.
+					if ( strpos( $remote_branch, 'HEAD ' ) !== false ) {
+						continue;
+					}
+	
+					$query_args = array(
+						'action'        => 'git-switch-branch',
+						'repo'          => $repo,
+						'branch'        => $remote_branch,
+						'nonce'         => wp_create_nonce( "git-switch-branch-{$repo}-{$remote_branch}" ),
+					);
+					$branch_switch_url = add_query_arg( $query_args, admin_url( 'admin-ajax.php' ) );
+	
+					$title = esc_html( $remote_branch );
+					if ( $remote_branch === $status['branch'] ) {
+						$title = '* ' . $title;
+					}
+	
+					$wp_admin_bar->add_menu( array(
+						'parent' => $switch_branch_menu_id,
+						'id'     => $switch_branch_menu_id . '-' . sanitize_key( $remote_branch ),
+						'title'  => $title,
+						'href'   => esc_url( $branch_switch_url ),
+					) );
+				}
 			}
 		}
-
 	}
 
 	/**
 	 * Get the current Git status
 	 */
-	public function get_git_status() {
+	public function get_repo_data( $repo ) {
+		$cache_status = array_filter( (array) get_transient( self::CACHE_KEY ) );
 
-		if ( false !== ( $cache_status = get_transient( self::CACHE_KEY ) ) ) {
-			return $cache_status;
+		if ( isset( $cache_status[ $repo ] ) ) {
+			// return $cache_status[ $repo ];
 		}
 
 		if ( ! function_exists( 'exec' ) ) {
 			return false;
 		}
 
-		$theme_path = get_stylesheet_directory();
+		// $theme_path = get_stylesheet_directory();
+		// exec( sprintf( 'cd %s; git status', escapeshellarg( $theme_path ) ), $status );
 
-		exec( sprintf( 'cd %s; git status', escapeshellarg( $theme_path ) ), $status );
-
+		$status = $this->git_get_status( $repo );
 		if ( empty( $status ) or ( false !== strpos( $status[0], 'fatal' ) ) ) {
 			return false;
 		}
@@ -229,7 +247,9 @@ class Git_Switch {
 			$return['dirty'] = '';
 		}
 
-		exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $theme_path ) ), $branches );
+		// exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $theme_path ) ), $branches );
+
+		$branches = $this->git_get_branches( $repo );
 		if ( ! empty( $branches ) ) {
 			$branches = array_map( function( $branch ) {
 				return trim( str_replace( 'origin/', '', $branch ) );
@@ -237,7 +257,9 @@ class Git_Switch {
 			$return['remote'] = $branches;
 		}
 
-		set_transient( self::CACHE_KEY, $return, MINUTE_IN_SECONDS * 3 );
+		$cache_status[ $repo ] = $return;
+
+		set_transient( self::CACHE_KEY, $cache_status, MINUTE_IN_SECONDS * 3 );
 
 		return $return;
 	}
@@ -245,23 +267,26 @@ class Git_Switch {
 	/**
 	 * Refresh Git
 	 */
-	public function refresh() {
+	public function refresh( $repo ) {
 
 		if ( ! function_exists( 'exec' ) ) {
 			return false;
 		}
 
-		$theme_path = get_stylesheet_directory();
-		exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $theme_path ) ) );
+		// $theme_path = get_stylesheet_directory();
+		// exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $theme_path ) ) );
 
-		delete_transient( self::CACHE_KEY );
+		$path = $this->get_repo_abspath( $repo );
+		exec( sprintf( 'cd %s; git remote update; git fetch origin; git remote prune origin', escapeshellarg( $path ) ) );
 
-		$status = $this->get_git_status();
-		if ( 'detached' !== $status['branch'] ) {
-			exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $theme_path ), escapeshellarg( $status['branch'] ) ) );
+		$status = $this->get_repo_data( $repo );
+		if ( isset( $status['branch'] ) && 'detached' !== $status['branch'] ) {
+			exec( sprintf( 'cd %s; git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $path ), escapeshellarg( $status['branch'] ) ) );
 		}
 
-		delete_transient( self::CACHE_KEY );
+		$git_cache = get_transient( self::CACHE_KEY );
+		unset( $git_cache[ $repo ] );
+		set_transient( self::CACHE_KEY, $git_cache, MINUTE_IN_SECONDS * 3 );
 
 		$this->schedule_cache_purging();
 	}
@@ -275,15 +300,22 @@ class Git_Switch {
 			return;
 		}
 
-		if ( ! empty( $_GET['git-switch-auto-deploy'] ) && $_GET['git-switch-auto-deploy'] === GIT_SWITCH_DEPLOY_SECRET ) {
-			$this->refresh();
+		$repo = filter_input( INPUT_GET, 'repo' );
+		if ( ! $repo ) {
+			return;
+		}
+
+		$autodeploy_key = filter_input( INPUT_GET, 'git-switch-auto-deploy' );
+		if ( $autodeploy_key === GIT_SWITCH_DEPLOY_SECRET ) {
+			$this->refresh( $repo );
 			echo "Refreshed.";
 			exit;
 		}
 
-		if ( ! empty( $_GET['git-pull'] ) && $_GET['git-pull'] === GIT_SWITCH_DEPLOY_SECRET ) {
-			$this->refresh();
-			wp_safe_redirect( remove_query_arg( 'git-pull' ) );
+		$git_pull_key = filter_input( INPUT_GET, 'git-pull' );
+		if ( $git_pull_key === GIT_SWITCH_DEPLOY_SECRET ) {
+			$this->refresh( $repo );
+			wp_safe_redirect( remove_query_arg( [ 'git-pull', 'repo' ] ) );
 			exit;
 		}
 	}
@@ -299,6 +331,44 @@ class Git_Switch {
 		if ( function_exists( 'opcache_reset' ) ) {
 			opcache_reset();
 		}
+	}
+
+	/**
+	 * Checkout the specified branch and update submodules.
+	 *
+	 * @param string $repo The path to the repo directory.
+	 * @param string $branch The branch to checkout.
+	 * @return array The results of the execution.
+	 */
+	private function git_checkout_branch( $repo, $branch ) {
+		$path = $this->get_repo_abspath( $repo );
+		exec( sprintf( 'cd %s; git checkout -f %s; git submodule update --init', escapeshellarg( $path ), escapeshellarg( $branch ) ), $results );
+		return $results;
+	}
+
+	private function git_get_status( $repo ) {
+		$path = $this->get_repo_abspath( $repo );
+		exec( sprintf( 'cd %s; git status', escapeshellarg( $path ) ), $status );
+		return $status;
+	}
+
+	private function git_get_branches( $repo ) {
+		$path = $this->get_repo_abspath( $repo );
+		exec( sprintf( 'cd %s; git branch -r --sort=-committerdate', escapeshellarg( $path ) ), $branches );
+		return $branches;
+	}
+
+	private function get_repo_abspath( $repo ) {
+		return trailingslashit( WP_CONTENT_DIR ) . $repo;
+	}
+
+	/**
+	 * Get the list of repos.
+	 *
+	 * @return array The list of repos.
+	 */
+	private function get_repos() {
+		return self::REPOS;
 	}
 }
 
