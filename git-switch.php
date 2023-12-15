@@ -121,13 +121,12 @@ class Git_Switch {
 		}
 
 		$this->execute_git_command( $repo, sprintf( 'git checkout -f %s; git submodule update --init', escapeshellarg( $branch ) ) );
-		$this->opcache_reset();
-		$this->memcached_reset();
-		$this->clear_cache( $repo );
+		
+		$this->purge_wp_cache();
+		$this->purge_git_branch_cache( $repo );
+		$this->schedule_third_party_cache_purging();
 
 		do_action( 'git_switch_branch', $branch, $repo );
-
-		$this->schedule_cache_purging();
 
 		wp_safe_redirect( wp_get_referer() );
 		exit;
@@ -272,9 +271,9 @@ class Git_Switch {
 			$this->execute_git_command( $repo, sprintf( 'git clean -fd; git reset --hard; git pull -f origin %s; git submodule update --init --recursive', escapeshellarg( $status['branch'] ) ) );
 		}
 
-		$this->clear_cache( $repo );
-
-		$this->schedule_cache_purging();
+		$this->purge_wp_cache();
+		$this->purge_git_branch_cache( $repo );
+		$this->schedule_third_party_cache_purging();
 	}
 
 	/**
@@ -309,23 +308,15 @@ class Git_Switch {
 	/**
 	 * Force cache purging on next page load.
 	 */
-	protected function schedule_cache_purging() {
+	protected function schedule_third_party_cache_purging() {
 		set_transient( 'force_purge_cache', true, 15 * MINUTE_IN_SECONDS );
 	}
 
-	/**
-	 * Reset the opcache
-	 */
-	protected function opcache_reset() {
+	protected function purge_wp_cache() {
 		if ( function_exists( 'opcache_reset' ) ) {
 			opcache_reset();
 		}
-	}
 
-	/**
-	 * Reset the memcached cache
-	 */
-	protected function memcached_reset() {
 		if ( function_exists( 'wp_cache_flush' ) ) {
 			wp_cache_flush();
 		}
@@ -392,7 +383,7 @@ class Git_Switch {
 	 * 
 	 * @param string|null $repo The repo to clear
 	 */
-	private function clear_cache( $repo = null ) {
+	private function purge_git_branch_cache( $repo = null ) {
 		if ( $repo ) {
 			$git_cache = get_transient( self::CACHE_KEY );
 			unset( $git_cache[ $repo ] );
