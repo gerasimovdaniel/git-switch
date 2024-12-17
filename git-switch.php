@@ -218,7 +218,7 @@ class Git_Switch {
 		}
 
 		$status = $this->execute_git_command( $repo, 'git status' );
-		if ( empty( $status ) or ( false !== strpos( $status[0], 'fatal' ) ) ) {
+		if ( empty( $status ) or ( false !== strpos( $status[0], 'fatal:' ) ) ) {
 			return false;
 		}
 
